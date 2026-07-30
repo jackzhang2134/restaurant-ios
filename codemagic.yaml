@@ -10,7 +10,7 @@ workflows:
         script: brew install xcodegen
       - name: Generate Xcode Project
         script: cd RestaurantManager && xcodegen generate
-      - name: Build Archive with Ad-Hoc Signing
+      - name: Build Archive
         script: |
           set -e
           cd RestaurantManager
@@ -21,10 +21,16 @@ workflows:
             -configuration Release \
             -archivePath $CM_BUILD_DIR/RestaurantManager.xcarchive \
             -destination 'generic/platform=iOS' \
-            CODE_SIGN_IDENTITY="-" \
-            CODE_SIGN_STYLE=Automatic \
-            DEVELOPMENT_TEAM="" \
-            ONLY_ACTIVE_ARCH=NO 2>&1 | tail -30
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ONLY_ACTIVE_ARCH=NO 2>&1 | tail -100
+      - name: Verify Archive
+        script: |
+          ls -la $CM_BUILD_DIR/RestaurantManager.xcarchive/Products/Applications/
+          echo "=== Archive contents ==="
+          find $CM_BUILD_DIR/RestaurantManager.xcarchive -maxdepth 4 -type f
       - name: Package IPA
         script: |
           set -e
@@ -32,9 +38,8 @@ workflows:
           mkdir -p Payload
           rm -rf Payload/*
           cp -R RestaurantManager.xcarchive/Products/Applications/RestaurantManager.app Payload/
-          cd Payload
-          zip -qr ../RestaurantManager.ipa .
-          cd ..
+          ls -la Payload/
+          zip -qr RestaurantManager.ipa Payload/
           ls -lh RestaurantManager.ipa
     artifacts:
       - RestaurantManager.ipa
