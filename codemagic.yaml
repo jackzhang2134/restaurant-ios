@@ -1,0 +1,35 @@
+workflows:
+  ios-build:
+    name: Build iOS IPA
+    instance_type: mac_mini_m1
+    max_build_duration: 20
+    environment:
+      xcode: 15.0
+    scripts:
+      - name: Install XcodeGen
+        script: brew install xcodegen
+      - name: Generate Xcode Project
+        script: cd RestaurantManager && xcodegen generate
+      - name: Build IPA
+        script: |
+          cd RestaurantManager
+          xcodebuild archive \
+            -project RestaurantManager.xcodeproj \
+            -scheme RestaurantManager \
+            -sdk iphoneos \
+            -configuration Release \
+            -archivePath $CM_BUILD_DIR/RestaurantManager.xcarchive \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ONLY_ACTIVE_ARCH=NO
+          mkdir -p $CM_BUILD_DIR/Payload
+          cp -R $CM_BUILD_DIR/RestaurantManager.xcarchive/Products/Applications/RestaurantManager.app $CM_BUILD_DIR/Payload/
+          cd $CM_BUILD_DIR
+          zip -r RestaurantManager.ipa Payload
+    artifacts:
+      - RestaurantManager.ipa
+    publishing:
+      email:
+        recipients:
+          - placeholder@email.com
