@@ -1,10 +1,10 @@
 workflows:
   ios-build:
     name: Build iOS IPA
-    instance_type: mac_mini_m1
+    instance_type: mac_mini
     max_build_duration: 20
     environment:
-      xcode: 14.3.1
+      xcode: 14.3
     scripts:
       - name: Install XcodeGen
         script: brew install xcodegen
