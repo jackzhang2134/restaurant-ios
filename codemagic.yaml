@@ -22,12 +22,9 @@ workflows:
             -archivePath $CM_BUILD_DIR/RestaurantManager.xcarchive \
             -destination 'generic/platform=iOS' \
             CODE_SIGN_IDENTITY="-" \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGNING_REQUIRED=YES \
-            CODE_SIGNING_ALLOWED=YES \
+            CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM="" \
-            PROVISIONING_PROFILE_SPECIFIER="" \
-            ONLY_ACTIVE_ARCH=NO 2>&1 | tail -20
+            ONLY_ACTIVE_ARCH=NO 2>&1 | tail -30
       - name: Package IPA
         script: |
           set -e
