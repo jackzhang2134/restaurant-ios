@@ -1,0 +1,48 @@
+name: Build iOS IPA
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-13
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode Project
+        run: cd RestaurantManager && xcodegen generate
+
+      - name: Build Archive
+        run: |
+          cd RestaurantManager
+          xcodebuild archive \
+            -project RestaurantManager.xcodeproj \
+            -scheme RestaurantManager \
+            -sdk iphoneos \
+            -configuration Release \
+            -archivePath build/RestaurantManager.xcarchive \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ONLY_ACTIVE_ARCH=NO
+
+      - name: Export IPA
+        run: |
+          mkdir -p RestaurantManager/build/Payload
+          cp -R RestaurantManager/build/RestaurantManager.xcarchive/Products/Applications/RestaurantManager.app RestaurantManager/build/Payload/
+          cd RestaurantManager/build
+          zip -r RestaurantManager.ipa Payload
+          mv RestaurantManager.ipa ../..
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: RestaurantManager-Host-iOS
+          path: RestaurantManager.ipa
+          retention-days: 7
