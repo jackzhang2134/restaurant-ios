@@ -128,3 +128,8 @@ struct SubDevice: Codable {
     var registeredAt: TimeInterval = Date().timeIntervalSince1970
     var lastSeenAt: TimeInterval = Date().timeIntervalSince1970
 }
+
+struct OrderWithItems: Codable {
+    var order: Order
+    var items: [OrderItem]
+}
