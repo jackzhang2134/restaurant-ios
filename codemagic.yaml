@@ -10,30 +10,33 @@ workflows:
         script: brew install xcodegen
       - name: Generate Xcode Project
         script: cd RestaurantManager && xcodegen generate
-      - name: Build Archive
+      - name: Build App
         script: |
-          set +e
+          set -e
           cd RestaurantManager
-          xcodebuild archive \
+          xcodebuild build \
             -project RestaurantManager.xcodeproj \
             -scheme RestaurantManager \
             -sdk iphoneos \
             -configuration Release \
-            -archivePath $CM_BUILD_DIR/RestaurantManager.xcarchive \
             -destination 'generic/platform=iOS' \
             CODE_SIGN_IDENTITY="-" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             ONLY_ACTIVE_ARCH=NO 2>&1 | tail -50
-          echo "=== Archive exit: $? ==="
-          ls -la $CM_BUILD_DIR/RestaurantManager.xcarchive/ 2>&1 | head -10
+          echo "=== Build complete ==="
+          APP_PATH=$(find $HOME/Library/Developer/Xcode/DerivedData -name "RestaurantManager.app" -path "*Release-iphoneos*" | head -1)
+          echo "APP_PATH=$APP_PATH"
+          ls -la "$APP_PATH"
       - name: Package IPA
         script: |
           set -e
+          APP_PATH=$(find $HOME/Library/Developer/Xcode/DerivedData -name "RestaurantManager.app" -path "*Release-iphoneos*" | head -1)
+          echo "Using app: $APP_PATH"
           cd $CM_BUILD_DIR
           mkdir -p Payload
           rm -rf Payload/*
-          cp -R RestaurantManager.xcarchive/Products/Applications/RestaurantManager.app Payload/
+          cp -R "$APP_PATH" Payload/
           cd Payload
           zip -qr ../RestaurantManager.ipa .
           cd ..
