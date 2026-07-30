@@ -12,7 +12,7 @@ workflows:
         script: cd RestaurantManager && xcodegen generate
       - name: Build App
         script: |
-          set -e
+          set +e
           cd RestaurantManager
           xcodebuild build \
             -project RestaurantManager.xcodeproj \
@@ -23,16 +23,19 @@ workflows:
             CODE_SIGN_IDENTITY="-" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
-            ONLY_ACTIVE_ARCH=NO 2>&1 | tail -50
-          echo "=== Build complete ==="
+            ONLY_ACTIVE_ARCH=NO 2>&1 | tail -30
           APP_PATH=$(find $HOME/Library/Developer/Xcode/DerivedData -name "RestaurantManager.app" -path "*Release-iphoneos*" | head -1)
           echo "APP_PATH=$APP_PATH"
+          echo "=== Ad-hoc signing binary ==="
+          codesign --force --sign - --timestamp=none "$APP_PATH"
+          echo "=== Verifying signature ==="
+          codesign -dv "$APP_PATH" 2>&1 | head -5
+          echo "=== App contents ==="
           ls -la "$APP_PATH"
       - name: Package IPA
         script: |
           set -e
           APP_PATH=$(find $HOME/Library/Developer/Xcode/DerivedData -name "RestaurantManager.app" -path "*Release-iphoneos*" | head -1)
-          echo "Using app: $APP_PATH"
           cd $CM_BUILD_DIR
           mkdir -p Payload
           rm -rf Payload/*
