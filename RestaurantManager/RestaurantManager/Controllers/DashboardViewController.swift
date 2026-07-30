@@ -12,6 +12,10 @@ class DashboardViewController: UITableViewController, TCPServerDelegate {
         title = "仪表盘"
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
         server.delegate = self
+        if !server.isRunning {
+            server.start()
+            print("=== Server auto-started ===")
+        }
         refreshData()
         Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.refreshData() }
     }

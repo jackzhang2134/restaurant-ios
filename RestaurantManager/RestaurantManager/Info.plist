@@ -38,6 +38,12 @@
         <key>NSAllowsLocalNetworking</key>
         <true/>
     </dict>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>作为主机管理端，需要通过本地网络连接子机设备进行数据同步</string>
+    <key>NSBonjourServices</key>
+    <array>
+        <string>_restaurant._tcp</string>
+    </array>
     <key>UIRequiresFullScreen</key>
     <true/>
 </dict>
