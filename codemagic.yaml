@@ -10,25 +10,36 @@ workflows:
         script: brew install xcodegen
       - name: Generate Xcode Project
         script: cd RestaurantManager && xcodegen generate
-      - name: Build IPA
+      - name: Build Archive
         script: |
+          set -e
           cd RestaurantManager
-          ARCHIVE_PATH="$CM_BUILD_DIR/RestaurantManager.xcarchive"
           xcodebuild archive \
             -project RestaurantManager.xcodeproj \
             -scheme RestaurantManager \
             -sdk iphoneos \
             -configuration Release \
-            -archivePath "$ARCHIVE_PATH" \
+            -archivePath $CM_BUILD_DIR/RestaurantManager.xcarchive \
+            -destination 'generic/platform=iOS' \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
-            ONLY_ACTIVE_ARCH=NO
+            CODE_SIGNING_ALLOWED=NO \
+            ONLY_ACTIVE_ARCH=NO 2>&1 | tail -100
+      - name: Verify Archive
+        script: |
+          ls -la $CM_BUILD_DIR/RestaurantManager.xcarchive/Products/Applications/
           echo "=== Archive contents ==="
-          ls -la "$ARCHIVE_PATH/Products/Applications/" 2>&1
-          mkdir -p "$CM_BUILD_DIR/Payload"
-          cp -R "$ARCHIVE_PATH/Products/Applications/RestaurantManager.app" "$CM_BUILD_DIR/Payload/"
-          cd "$CM_BUILD_DIR"
-          zip -r RestaurantManager.ipa Payload
+          find $CM_BUILD_DIR/RestaurantManager.xcarchive -maxdepth 4 -type f
+      - name: Package IPA
+        script: |
+          set -e
+          cd $CM_BUILD_DIR
+          mkdir -p Payload
+          rm -rf Payload/*
+          cp -R RestaurantManager.xcarchive/Products/Applications/RestaurantManager.app Payload/
+          ls -la Payload/
+          zip -qr RestaurantManager.ipa Payload/
+          ls -lh RestaurantManager.ipa
     artifacts:
       - RestaurantManager.ipa
