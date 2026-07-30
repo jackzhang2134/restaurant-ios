@@ -21,24 +21,25 @@ workflows:
             -configuration Release \
             -archivePath $CM_BUILD_DIR/RestaurantManager.xcarchive \
             -destination 'generic/platform=iOS' \
-            CODE_SIGN_IDENTITY="-" \
-            CODE_SIGNING_REQUIRED=YES \
-            CODE_SIGNING_ALLOWED=YES \
-            ONLY_ACTIVE_ARCH=NO 2>&1 | tail -30
-      - name: Package and Ad-Hoc Sign
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ONLY_ACTIVE_ARCH=NO 2>&1 | tail -100
+      - name: Verify Archive
+        script: |
+          ls -la $CM_BUILD_DIR/RestaurantManager.xcarchive/Products/Applications/
+          echo "=== Archive contents ==="
+          find $CM_BUILD_DIR/RestaurantManager.xcarchive -maxdepth 4 -type f
+      - name: Package IPA
         script: |
           set -e
           cd $CM_BUILD_DIR
           mkdir -p Payload
           rm -rf Payload/*
           cp -R RestaurantManager.xcarchive/Products/Applications/RestaurantManager.app Payload/
-          APP_PATH="Payload/RestaurantManager.app"
-          echo "=== Signing binary with ad-hoc ==="
-          codesign --force --sign - --timestamp=none "$APP_PATH"
-          echo "=== Verifying signature ==="
-          codesign -dv "$APP_PATH" 2>&1 | head -5
-          echo "=== Packaging IPA ==="
-          zip -qr RestaurantManager.ipa Payload
+          ls -la Payload/
+          zip -qr RestaurantManager.ipa Payload/
           ls -lh RestaurantManager.ipa
     artifacts:
       - RestaurantManager.ipa
