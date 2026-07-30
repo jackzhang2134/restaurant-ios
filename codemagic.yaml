@@ -13,23 +13,22 @@ workflows:
       - name: Build IPA
         script: |
           cd RestaurantManager
+          ARCHIVE_PATH="$CM_BUILD_DIR/RestaurantManager.xcarchive"
           xcodebuild archive \
             -project RestaurantManager.xcodeproj \
             -scheme RestaurantManager \
             -sdk iphoneos \
             -configuration Release \
-            -archivePath $CM_BUILD_DIR/RestaurantManager.xcarchive \
+            -archivePath "$ARCHIVE_PATH" \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             ONLY_ACTIVE_ARCH=NO
-          mkdir -p $CM_BUILD_DIR/Payload
-          cp -R $CM_BUILD_DIR/RestaurantManager.xcarchive/Products/Applications/RestaurantManager.app $CM_BUILD_DIR/Payload/
-          cd $CM_BUILD_DIR
+          echo "=== Archive contents ==="
+          ls -la "$ARCHIVE_PATH/Products/Applications/" 2>&1
+          mkdir -p "$CM_BUILD_DIR/Payload"
+          cp -R "$ARCHIVE_PATH/Products/Applications/RestaurantManager.app" "$CM_BUILD_DIR/Payload/"
+          cd "$CM_BUILD_DIR"
           zip -r RestaurantManager.ipa Payload
     artifacts:
       - RestaurantManager.ipa
-    publishing:
-      email:
-        recipients:
-          - placeholder@email.com

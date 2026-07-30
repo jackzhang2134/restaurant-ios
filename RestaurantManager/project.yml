@@ -24,6 +24,3 @@ targets:
         SUPPORTED_PLATFORMS: iphoneos
         IPHONEOS_DEPLOYMENT_TARGET: "12.0"
         SWIFT_VERSION: "5.0"
-    preBuildScripts:
-      - name: "Copy SQLite"
-        script: "echo 'Build Ready'"
