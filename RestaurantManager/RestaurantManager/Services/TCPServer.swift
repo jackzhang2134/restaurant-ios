@@ -1,4 +1,5 @@
 import Foundation
+import Network
 
 protocol TCPServerDelegate: AnyObject {
     func serverDidUpdateClients(count: Int)
@@ -11,122 +12,78 @@ protocol TCPServerDelegate: AnyObject {
 class TCPServer {
     static let shared = TCPServer()
     weak var delegate: TCPServerDelegate?
-    private var serverSocket: Int32 = -1
+    private var listener: NWListener?
     private(set) var connectedClients: Set<String> = []
-    private let queue = DispatchQueue(label: "http.server", qos: .background)
-    private let encoder = JSONEncoder()
+    private let queue = DispatchQueue(label: "tcp.server", qos: .background)
     private let decoder = JSONDecoder()
-    private var isServerRunning = false
 
-    var isRunning: Bool { isServerRunning }
+    var isRunning: Bool { listener != nil }
 
     func start() {
         guard !isRunning else { return }
-        isServerRunning = true
+        do {
+            let options = NWProtocolTCP.Options()
+            options.enableKeepalive = true
+            let params = NWParameters(tls: nil, tcp: options)
+            params.allowLocalEndpointReuse = true
+            params.includePeerToPeer = true
 
-        queue.async { [weak self] in
-            self?.runServer()
+            listener = try NWListener(using: params, on: NWEndpoint.Port(rawValue: 9876)!)
+            listener?.newConnectionHandler = { [weak self] conn in
+                self?.handleConnection(conn)
+            }
+            listener?.start(queue: queue)
+            print("=== TCP Server started on port 9876 ===")
+        } catch {
+            print("=== Server start failed: \(error) ===")
         }
     }
 
     func stop() {
-        isServerRunning = false
-        close(serverSocket)
-        serverSocket = -1
+        listener?.cancel()
+        listener = nil
         connectedClients.removeAll()
-        DispatchQueue.main.async { self.delegate?.serverDidUpdateClients(count: 0) }
+        delegate?.serverDidUpdateClients(count: 0)
     }
 
-    private func runServer() {
-        // Create socket
-        serverSocket = socket(AF_INET, SOCK_STREAM, 0)
-        guard serverSocket >= 0 else {
-            print("Socket creation failed")
-            isServerRunning = false; return
+    private func handleConnection(_ conn: NWConnection) {
+        let clientId = UUID().uuidString
+        connectedClients.insert(clientId)
+        DispatchQueue.main.async {
+            self.delegate?.serverDidUpdateClients(count: self.connectedClients.count)
         }
 
-        // Allow reuse
-        var yes: Int32 = 1
-        setsockopt(serverSocket, SOL_SOCKET, SO_REUSEADDR, &yes, socklen_t(MemoryLayout<Int32>.size))
+        conn.start(queue: queue)
+        readLoop(conn, clientId: clientId)
 
-        // Bind to port 9876
-        var addr = sockaddr_in()
-        addr.sin_family = sa_family_t(AF_INET)
-        addr.sin_port = UInt16(9876).bigEndian
-        addr.sin_addr.s_addr = INADDR_ANY
-
-        let bindResult = withUnsafePointer(to: &addr) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                bind(serverSocket, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
-            }
-        }
-
-        guard bindResult == 0 else {
-            print("Bind failed: \(String(cString: strerror(errno)))")
-            isServerRunning = false; return
-        }
-
-        // Listen
-        guard listen(serverSocket, 10) == 0 else {
-            print("Listen failed")
-            isServerRunning = false; return
-        }
-
-        print("=== HTTP Server listening on port 9876 ===")
-
-        while isServerRunning {
-            var clientAddr = sockaddr_in()
-            var len = socklen_t(MemoryLayout<sockaddr_in>.size)
-
-            let clientFd = withUnsafeMutablePointer(to: &clientAddr) {
-                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                    accept(serverSocket, $0, &len)
+        conn.stateUpdateHandler = { [weak self] state in
+            switch state {
+            case .cancelled, .failed(_):
+                self?.connectedClients.remove(clientId)
+                DispatchQueue.main.async {
+                    self?.delegate?.serverDidUpdateClients(count: self?.connectedClients.count ?? 0)
                 }
-            }
-
-            guard clientFd >= 0 else {
-                if errno != EINTR { print("Accept failed") }
-                continue
-            }
-
-            let clientId = UUID().uuidString
-            DispatchQueue.main.async {
-                self.connectedClients.insert(clientId)
-                self.delegate?.serverDidUpdateClients(count: self.connectedClients.count)
-            }
-
-            queue.async { [weak self] in
-                self?.handleHTTPClient(clientFd, clientId: clientId)
+            default: break
             }
         }
     }
 
-    private func handleHTTPClient(_ fd: Int32, clientId: String) {
-        defer {
-            close(fd)
-            DispatchQueue.main.async {
-                self.connectedClients.remove(clientId)
-                self.delegate?.serverDidUpdateClients(count: self.connectedClients.count)
+    private func readLoop(_ conn: NWConnection, clientId: String) {
+        conn.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, _, error in
+            guard let self = self else { return }
+            if let data = data, data.count > 0, let text = String(data: data, encoding: .utf8) {
+                self.processMessage(text.trimmingCharacters(in: .whitespacesAndNewlines), conn: conn)
+            }
+            if error == nil {
+                self.readLoop(conn, clientId: clientId)
             }
         }
+    }
 
-        var buf = [UInt8](repeating: 0, count: 65536)
-        let size = read(fd, &buf, buf.count)
-        guard size > 0 else { return }
-
-        let request = String(bytes: buf[0..<Int(size)], encoding: .utf8) ?? ""
-
-        // Parse HTTP: extract body after \r\n\r\n
-        guard let bodyStart = request.range(of: "\r\n\r\n") else {
-            sendHTTPResponse(fd, status: 400, body: "Bad Request")
-            return
-        }
-
-        let body = String(request[bodyStart.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !body.isEmpty, let jsonData = body.data(using: .utf8),
-              let dict = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
+    private func processMessage(_ json: String, conn: NWConnection) {
+        guard let dict = try? JSONSerialization.jsonObject(with: json.data(using: .utf8)!) as? [String: Any],
               let type = dict["type"] as? String else {
-            sendHTTPResponse(fd, status: 400, body: "Invalid JSON")
+            sendReply(conn, "{\"result\":\"invalid\"}")
             return
         }
 
@@ -146,10 +103,12 @@ class TCPServer {
                 db.updateLastSeen(deviceMac)
 
             case "UPLOAD_ORDER":
-                if let payload: OrderWithItems = self.decodePayload(payloadStr) {
+                if let payload = self.decodePayload(payloadStr, as: OrderWithItems.self) {
                     db.saveOrder(payload.order)
                     payload.items.forEach { db.saveOrderItem($0) }
                     self.delegate?.serverDidReceiveOrder(payload.order, items: payload.items)
+                } else {
+                    result = "parse_error"
                 }
 
             case "UPLOAD_PAYMENT":
@@ -164,24 +123,17 @@ class TCPServer {
                     self.delegate?.serverDidReceiveSummary(summary)
                 }
 
-            default: result = "unknown"
+            default:
+                result = "unknown"
             }
 
-            self.sendHTTPResponse(fd, status: 200, body: result)
+            self.sendReply(conn, "{\"result\":\"\(result)\"}")
         }
     }
 
-    private func sendHTTPResponse(_ fd: Int32, status: Int, body: String) {
-        let response = """
-        HTTP/1.1 \(status) OK\r
-        Content-Type: application/json\r
-        Content-Length: \(body.utf8.count)\r
-        Access-Control-Allow-Origin: *\r
-        Connection: close\r
-        \r
-        \(body)
-        """
-        _ = response.withCString { write(fd, $0, strlen($0)) }
+    private func sendReply(_ conn: NWConnection, _ json: String) {
+        let msg = json + "\n"
+        conn.send(content: msg.data(using: .utf8), completion: .idempotent)
     }
 
     private func decodePayload<T: Decodable>(_ json: String, as type: T.Type = T.self) -> T? {
