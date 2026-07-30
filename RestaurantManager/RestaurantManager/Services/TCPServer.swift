@@ -9,6 +9,11 @@ protocol TCPServerDelegate: AnyObject {
     func serverDidRegisterDevice(_ deviceMac: String)
 }
 
+struct OrderWithItems: Codable {
+    var order: Order
+    var items: [OrderItem]
+}
+
 class TCPServer {
     static let shared = TCPServer()
     weak var delegate: TCPServerDelegate?
@@ -28,7 +33,6 @@ class TCPServer {
             listener = try NWListener(using: params, on: 9876)
             listener?.newConnectionHandler = { [weak self] conn in self?.handleConnection(conn) }
             listener?.start(queue: queue)
-            print("TCP server started on 9876")
         } catch {
             print("Failed to start server: \(error)")
         }
@@ -50,9 +54,11 @@ class TCPServer {
         receiveData(conn, clientId: clientId)
 
         conn.stateUpdateHandler = { [weak self] state in
-            if state == .cancelled || state == .failed(nil) {
+            switch state {
+            case .cancelled, .failed(_):
                 self?.connectedClients.remove(clientId)
                 DispatchQueue.main.async { self?.delegate?.serverDidUpdateClients(count: self?.connectedClients.count ?? 0) }
+            default: break
             }
         }
     }
@@ -85,22 +91,22 @@ class TCPServer {
                 self.sendAck(conn, message: "OK")
 
             case "UPLOAD_ORDER":
-                if let payload: (Order, [OrderItem]) = self.decodePayload(payloadStr) {
-                    db.saveOrder(payload.0)
-                    payload.1.forEach { db.saveOrderItem($0) }
-                    self.delegate?.serverDidReceiveOrder(payload.0, items: payload.1)
+                if let payload = self.decodePayload(payloadStr, as: OrderWithItems.self) {
+                    db.saveOrder(payload.order)
+                    payload.items.forEach { db.saveOrderItem($0) }
+                    self.delegate?.serverDidReceiveOrder(payload.order, items: payload.items)
                     self.sendAck(conn, message: "order received")
                 }
 
             case "UPLOAD_PAYMENT":
-                if let payment: Payment = self.decodeObj(payloadStr) {
+                if let payment: Payment = self.decodePayload(payloadStr) {
                     db.savePayment(payment)
                     self.delegate?.serverDidReceivePayment(payment)
                     self.sendAck(conn, message: "payment received")
                 }
 
             case "UPLOAD_DAILY_SUMMARY":
-                if let summary: DailySalesSummary = self.decodeObj(payloadStr) {
+                if let summary: DailySalesSummary = self.decodePayload(payloadStr) {
                     db.saveSummary(summary)
                     self.delegate?.serverDidReceiveSummary(summary)
                     self.sendAck(conn, message: "summary received")
@@ -117,10 +123,9 @@ class TCPServer {
         conn.send(content: msg.data(using: .utf8), completion: .idempotent)
     }
 
-    private func decodePayload<T: Decodable>(_ json: String) -> T? { decodeObj(json) }
-    private func decodeObj<T: Decodable>(_ json: String) -> T? {
+    private func decodePayload<T: Decodable>(_ json: String, as type: T.Type = T.self) -> T? {
         guard let data = json.data(using: .utf8) else { return nil }
-        return try? decoder.decode(T.self, from: data)
+        return try? decoder.decode(type, from: data)
     }
 
     func getLocalIP() -> String {

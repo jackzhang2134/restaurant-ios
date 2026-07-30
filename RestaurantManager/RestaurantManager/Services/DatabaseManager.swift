@@ -108,7 +108,7 @@ class DatabaseManager {
     func getOrdersByDate(_ dateStr: String) -> [Order] { query("SELECT * FROM orders WHERE dateStr=? ORDER BY createdAt DESC", [dateStr]).compactMap { decode(from: $0) } }
     func getOpenOrders() -> [Order] { query("SELECT * FROM orders WHERE status != '已结清' AND status != '已取消' ORDER BY updatedAt DESC").compactMap { decode(from: $0) } }
 
-    func saveOrderItem(_ item: OrderItem) { exec("INSERT OR REPLACE INTO order_items VALUES(?,?,?,?,?,?,?,?,?,?,?)", [item.itemId, item.orderId, item.itemType, item.description, item.unitPrice, item.quantity, item.amount, item.isPaid, item.paidAt, item.paymentMethod?.rawValue, encode(item)]) }
+    func saveOrderItem(_ item: OrderItem) { exec("INSERT OR REPLACE INTO order_items VALUES(?,?,?,?,?,?,?,?,?,?,?)", [item.itemId, item.orderId, item.itemType, item.description, item.unitPrice, item.quantity, item.amount, item.isPaid, item.paidAt, item.paymentMethod?.rawValue as Any, encode(item)]) }
     func getOrderItems(_ orderId: String) -> [OrderItem] { query("SELECT * FROM order_items WHERE orderId=?", [orderId]).compactMap { decode(from: $0) } }
 
     func savePayment(_ p: Payment) { exec("INSERT OR REPLACE INTO payments VALUES(?,?,?,?,?,?,?,?,?)", [p.paymentId, p.orderId, p.orderItemId, p.amount, p.method.rawValue, p.deviceMac, p.dateStr, p.paidAt, encode(p)]) }
